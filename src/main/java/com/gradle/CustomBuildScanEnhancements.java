@@ -171,7 +171,7 @@ final class CustomBuildScanEnhancements {
                     Map<String, String> params = new LinkedHashMap<>();
                     params.put("CI job", j);
                     params.put("CI build number", b);
-                    addSearchLink(buildScan, "CI pipeline", params);
+                    addSearchLinkMultipleValues(buildScan, "CI pipeline", params);
                 }));
             }
 
@@ -474,17 +474,21 @@ final class CustomBuildScanEnhancements {
         // Set custom values immediately, but do not add custom links until 'buildFinished' since
         // creating customs links requires the server url to be fully configured
         buildScan.value(name, value);
+        System.out.println("Calling buildFinished for link " + name + " from:\n\t" + getStackTrace());
         buildScan.buildFinished(result -> addSearchLink(buildScan, linkLabel, name, value));
     }
 
-    private static void addSearchLink(BuildScanApiAdapter buildScan, String linkLabel, Map<String, String> values) {
+    private static void addSearchLinkMultipleValues(BuildScanApiAdapter buildScan, String linkLabel, Map<String, String> values) {
         // the parameters for a link querying multiple custom values look like:
         // search.names=name1,name2&search.values=value1,value2
         // this reduction groups all names and all values together in order to properly generate the query
         values.entrySet().stream()
             .sorted(Map.Entry.comparingByKey()) // results in a deterministic order of link parameters
             .reduce((a, b) -> new AbstractMap.SimpleEntry<>(a.getKey() + "," + b.getKey(), a.getValue() + "," + b.getValue()))
-            .ifPresent(x -> buildScan.buildFinished(result -> addSearchLink(buildScan, linkLabel, x.getKey(), x.getValue())));
+            .ifPresent(x -> {
+                System.out.println("Calling buildFinished for link " + linkLabel + ":" + x.getKey() + " from:" + getStackTrace());
+                buildScan.buildFinished(result -> addSearchLink(buildScan, linkLabel, x.getKey(), x.getValue()));
+            });
     }
 
     private static void addSearchLink(BuildScanApiAdapter buildScan, String linkLabel, String name, String value) {
@@ -494,6 +498,14 @@ final class CustomBuildScanEnhancements {
             String url = appendIfMissing(server, "/") + "scans?" + searchParams + "#selection.buildScanB=" + urlEncode("{SCAN_ID}");
             buildScan.link(linkLabel + " build scans", url);
         }
+    }
+
+    private static String getStackTrace() {
+        return Arrays.stream(Thread.currentThread().getStackTrace())
+            .skip(2)
+            .map(StackTraceElement::toString)
+            .reduce((a, b) -> a + "\n\t" + b)
+            .orElse("");
     }
 
 }
